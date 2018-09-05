@@ -1,0 +1,239 @@
+# Objective: To review the post-creation status of Oracle Non-RAC 12.1.0.2 database on Linux server 
+# Date of last update: 10-May-2018
+# Version: 1.2
+
+Note: In the notes below substitute "abcdev" by the actual database name
+
+----------------------------------------------------------------------------------------------------------
+Verify that alias is set in .bash_profile
+
+$ grep abcdev .bash_profile
+
+$ abcdev
+
+$ env | grep ORA
+
+--Expected output:
+
+ORACLE_SID=abcdev
+ORACLE_BASE=/u01/app/oracle
+ORACLE_HOME=/u01/app/oracle/product/12.1.0.2/dbhome_1
+
+$ echo $PATH
+
+--Expected output:
+
+/u01/app/oracle/product/12.1.0.2/dbhome_1/bin:/bin:/usr/bin
+
+----------------------------------------------------------------------------------------------------------
+Verify that Oracle SID  for the database is set to lower case value
+
+$ echo $ORACLE_SID
+
+$ ps -ef | grep pmon | grep abcdev
+
+----------------------------------------------------------------------------------------------------------
+Check database name
+
+$ sqlplus / as sysdba
+
+SQL> select name from v$database;
+
+----------------------------------------------------------------------------------------------------------
+Check global database name (domain part should be NULL)
+
+SQL> select * from global_name;
+
+SQL> show parameter db_domain
+
+--Expected output: db_domain should be NULL
+
+----------------------------------------------------------------------------------------------------------
+Verify if database is in "READ WRITE" state
+
+SQL> select open_mode from v$database;
+
+--Expected output:
+
+OPEN_MODE
+--------------------
+READ WRITE
+
+----------------------------------------------------------------------------------------------------------
+Verify amount of memory allocated for the database
+
+SQL> show sga
+
+Expected output for "Total System Global Area": Total System Global Area 4294967296 bytes
+
+SQL> show parameter memory_target
+
+--Expected output:
+
+AME                                 TYPE        VALUE
+------------------------------------ ----------- ----
+memory_target                        big integer 4G
+
+
+----------------------------------------------------------------------------------------------------------
+Verify archivelog status
+
+SQL> select log_mode from v$database;
+
+----------------------------------------------------------------------------------------------------------
+Verify the location of controlfile
+
+SQL> select name from v$controlfile;
+
+--Controlfiles are expected to to be under /u02/oradata/<DB_NAME>/controlfile 
+                                 and under /u02/fast_recovery_area/<db_name>/controlfile
+  
+--The output should be similar to the following:
+
+NAME
+--------------------------------------------------------------
+/u02/oradata/ABCDEV/controlfile/o1_mf_f96h6bvo_.ctl
+/u02/fast_recovery_area/ABCDEV/controlfile/o1_mf_f96h6bxp_.ctl
+
+----------------------------------------------------------------------------------------------------------
+Verify the location of redo logs
+
+SQL> select member from v$logfile order by member;
+
+Redo Logs are expected to to be under /u02/oradata/<DB_NAME>/onlinelog
+                            and under /u02/fast_recovery_area/<db_name>/onlinelog
+
+--The output should be similar to the following:
+
+/u02/fast_recovery_area/ABCDEV/onlinelog/o1_mf_1_f96h6c2j_.log
+/u02/fast_recovery_area/ABCDEV/onlinelog/o1_mf_2_f96h6c5s_.log
+/u02/fast_recovery_area/ABCDEV/onlinelog/o1_mf_3_f96h6c92_.log
+/u02/oradata/ABCDEV/onlinelog/o1_mf_1_f96h6c0o_.log
+/u02/oradata/ABCDEV/onlinelog/o1_mf_2_f96h6c42_.log
+/u02/oradata/ABCDEV/onlinelog/o1_mf_3_f96h6c7h_.log
+
+
+----------------------------------------------------------------------------------------------------------
+Verify the location of data files
+
+SQL> select name from v$datafile;
+
+--Data files are expected to to be under /u02/oradata/<DB_NAME>/datafile
+
+--The output should be similar to the following:
+
+NAME
+---------------------------------------------------------
+/u02/oradata/ABCDEV/datafile/o1_mf_system_f96h6doh_.dbf
+/u02/oradata/ABCDEV/datafile/o1_mf_sysaux_f96h6kbr_.dbf
+/u02/oradata/ABCDEV/datafile/o1_mf_undotbs1_f96h6n8h_.dbf
+/u02/oradata/ABCDEV/datafile/o1_mf_users_f96h6ynd_.dbf
+
+----------------------------------------------------------------------------------------------------------
+Verify the location of temp files
+
+SQL> select name from v$tempfile;
+
+--Data files are expected to to be under /u02/oradata/<DB_NAME>/datafile
+
+--The output should be similar to the following:
+
+NAME
+-----------------------------------------------------
+/u02/oradata/ABCDEV/datafile/o1_mf_temp_f96h6o7h_.tmp
+
+----------------------------------------------------------------------------------------------------------
+Verify content of parameter file
+
+SQL> create pfile='/tmp/init.ora' from spfile;
+
+$ view /tmp/init.ora
+
+Excluding "__" double underscore parameters and the content of the file should be as follows (replace abcdev by correct name):
+
+*.audit_file_dest='/u01/app/oracle/admin/abcdev/adump'
+*.audit_trail='db'
+*.compatible='12.1.0.2.0'
+*.control_files='/u02/oradata/ABCDEV/controlfile/o1_mf_f96h6bvo_.ctl','/u02/fast_recovery_area/ABCDEV/controlfile/o1_mf_f96h6bxp_.ctl'
+*.db_block_size=8192
+*.db_create_file_dest='/u02/oradata'
+*.db_domain=''
+*.db_name='abcdev'
+*.db_recovery_file_dest='/u02/fast_recovery_area'
+*.db_recovery_file_dest_size=128g
+*.diagnostic_dest='/u01/app/oracle'
+*.dispatchers='(PROTOCOL=TCP) (SERVICE=abcdevXDB)'
+*.memory_target=4096m
+*.open_cursors=1000
+*.processes=1000
+*.remote_login_passwordfile='EXCLUSIVE'
+*.undo_tablespace='UNDOTBS1'
+
+----------------------------------------------------------------------------------------------------------
+Verify installed components:
+
+$ sqlplus / as sysdba
+
+SQL> select comp_name from dba_registry;
+
+--The expected components for 12c database":
+
+COMP_NAME
+-----------------------------------
+Oracle Workspace Manager
+Oracle XML Database
+Oracle Database Catalog Views
+Oracle Database Packages and Types
+
+----------------------------------------------------------------------------------------------------------
+Verify that NLS_CHARACTERSET is set to AL32UTF8
+
+SQL> select value from nls_database_parameters where parameter = 'NLS_CHARACTERSET';
+
+--Expected output:
+
+VALUE
+---------
+AL32UTF8
+
+----------------------------------------------------------------------------------------------------------
+Verify that SYSTEM, USERS and SERVICE profiles have been deployed:
+
+
+column profile  format a10
+select distinct profile 
+  from dba_profiles
+  where profile in ('SYSTEM', 'USERS', 'SERVICE')
+  order by profile;
+
+--Expected output:
+
+PROFILE
+----------
+SERVICE
+SYSTEM
+USERS
+----------------------------------------------------------------------------------------------------------
+Verify that SYS, SYSTEM and DBSNMP accounts have been assigned to the proper profiles:
+
+column username format a10
+column profile  format a10
+select username, profile from dba_users 
+  where username in ('SYS', 'SYSTEM', 'DBSNMP')
+  order by username;
+
+--Expected output:
+
+USERNAME   PROFILE
+---------- ----------
+DBSNMP     SERVICE
+SYS        SYSTEM
+SYSTEM     SYSTEM
+
+----------------------------------------------------------------------------------------------------------
+Verify that the database is registered in the listener
+
+$ lsnrctl status
+
+----------------------------------------------------------------------------------------------------------
+
